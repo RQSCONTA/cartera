@@ -67,8 +67,11 @@ h1 { font-size: 18px; font-weight: 600; margin: 0; }
 
   <div id="config" class="caja oculto">
     <div style="font-weight:600;margin-bottom:6px">Falta configurar</div>
-    <div class="chico">Pega aquí el código de configuración que te mandaste (empieza con «k=»). Solo se hace una
-      vez: la clave queda guardada en este teléfono.</div>
+    <div class="chico">Copia en Teams el código que te mandaste (empieza con «k=») y toca el botón. Solo se hace
+      una vez: la clave queda guardada en este teléfono.</div>
+    <button id="pegar" style="margin-top:10px;width:100%;padding:14px;font:inherit;font-size:17px;font-weight:600;
+      border:0;border-radius:10px;background:var(--acento);color:#fff">Pegar código y configurar</button>
+    <div class="chico" style="margin-top:10px">O pégalo a mano en este cuadro:</div>
     <textarea id="pegado" rows="4" style="width:100%;margin-top:10px;font:inherit;font-size:14px;padding:8px;
       border-radius:8px;border:1px solid var(--linea);background:var(--suave);color:var(--texto)"
       placeholder="k=…&amp;c=…&amp;r=…"></textarea>
@@ -295,6 +298,15 @@ async function iniciar() {
   if (!cfg) {
     document.getElementById("config").classList.remove("oculto");
     document.getElementById("insignia").textContent = "Sin configurar";
+    document.getElementById("pegar").onclick = async () => {
+      try {
+        if (guardarDesde(await navigator.clipboard.readText())) { location.reload(); return; }
+        document.getElementById("error-config").textContent =
+          "Lo que tienes copiado no es el código. Cópialo de nuevo desde Teams (debe empezar con k=).";
+      } catch (e) {
+        document.getElementById("error-config").textContent = "No se pudo leer lo copiado: pégalo en el cuadro.";
+      }
+    };
     document.getElementById("configurar").onclick = () => {
       if (guardarDesde(document.getElementById("pegado").value)) location.reload();
       else document.getElementById("error-config").textContent =
