@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Cartera">
+<meta name="referrer" content="no-referrer">
+<title>Cartera en vivo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icono-180.png">
+<style>
+:root {
+  --fondo: #f4f3ef; --tarjeta: #ffffff; --suave: #efede7; --linea: rgba(0,0,0,.12);
+  --texto: #1f1e1c; --tenue: #6b6963; --gana: #2e7d32; --pierde: #c62828; --aviso: #a86b00; --acento: #1b5fa8;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #141413; --tarjeta: #1f1e1d; --suave: #2a2927; --linea: rgba(255,255,255,.14);
+    --texto: #f0eee8; --tenue: #a8a59d; --gana: #66bb6a; --pierde: #ef5350; --aviso: #f0b429; --acento: #64a8f0;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--fondo); color: var(--texto);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+}
+main { max-width: 480px; margin: 0 auto; }
+.fila { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cabeza { margin: 4px 0 12px; }
+h1 { font-size: 18px; font-weight: 600; margin: 0; }
+.insignia { font-size: 12px; padding: 2px 8px; border-radius: 8px; background: var(--suave); color: var(--tenue); }
+.insignia.ok { color: var(--gana); }
+.insignia.mal { color: var(--aviso); }
+.caja { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 12px; padding: 12px 14px;
+  margin-bottom: 10px; }
+.chico { font-size: 12px; color: var(--tenue); }
+.grande { font-size: 30px; font-weight: 600; }
+.gana { color: var(--gana); } .pierde { color: var(--pierde); }
+.selector { display: flex; background: var(--suave); border-radius: 9px; padding: 3px; margin-bottom: 10px; }
+.selector button { flex: 1; border: 0; background: transparent; color: var(--tenue); font: inherit; font-size: 14px;
+  padding: 6px; border-radius: 7px; }
+.selector button.activo { background: var(--tarjeta); color: var(--texto); font-weight: 600; }
+.desglose div { padding: 3px 0; }
+.desglose .total { border-top: 1px solid var(--linea); margin-top: 4px; padding-top: 6px; font-weight: 600; }
+.rejilla { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.rejilla b { display: block; font-weight: 500; color: var(--texto); }
+.rejilla b.gana { color: var(--gana); } .rejilla b.pierde { color: var(--pierde); }
+.pos .nombre { font-weight: 600; font-size: 16px; }
+.barra { height: 6px; background: var(--suave); border-radius: 3px; margin-top: 5px; overflow: hidden; }
+.barra i { display: block; height: 6px; background: var(--aviso); border-radius: 3px; }
+.pie { font-size: 12px; color: var(--tenue); line-height: 1.6; margin-top: 6px; }
+.alerta { background: var(--suave); color: var(--aviso); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px;
+  font-size: 13px; }
+.oculto { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="fila cabeza">
+    <h1>Prueba en papel</h1>
+    <span id="insignia" class="insignia">Conectando…</span>
+  </div>
+
+  <div id="config" class="caja oculto">
+    <div style="font-weight:600;margin-bottom:6px">Falta configurar</div>
+    <div class="chico">Abre en este iPhone el enlace de configuración que genera el servidor. Solo se hace una
+      vez: la clave queda guardada en el teléfono y no viaja a ningún servidor.</div>
+  </div>
+
+  <div id="avisos"></div>
+
+  <div id="contenido" class="oculto">
+    <div class="caja">
+      <div class="chico">Capital estimado ahora</div>
+      <div class="grande"><span id="capital">—</span> <span class="chico">USDT</span></div>
+      <div id="variacion" class="chico"></div>
+    </div>
+
+    <div class="selector" role="tablist">
+      <button id="b-arranque" class="activo" role="tab">Desde el arranque</button>
+      <button id="b-hoy" role="tab">Hoy (desde las 22:00)</button>
+    </div>
+
+    <div class="caja desglose" id="desglose"></div>
+
+    <div class="chico" id="titulo-pos" style="margin:4px 2px 6px"></div>
+    <div id="posiciones"></div>
+
+    <div class="pie" id="pie"></div>
+  </div>
+</main>
+<script src="nucleo.js"></script>
+<script>
+"use strict";
+const N = window.Nucleo;
+const POLL_MS = 30000, PRECIO_VIEJO_MS = 10000, SIN_LATIDO_MS = 45 * 60000, MOTOR_ATRASADO_MS = 5 * 60000;
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+let cfg = null, clave = null, foto = null, precios = {}, horaPrecio = {}, ws = null, wsSimbolos = "", vista = "arranque";
+let ultimaConsulta = 0, invalidas = 0, rechazoViejo = false, errorRed = null, wsDesde = 0;
+
+function leerConfig() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("k") && h.get("c") && h.get("r")) {
+    // Configuración nueva (o rotación): se borra la anterior, incluida su secuencia.
+    try { Object.keys(localStorage).filter((k) => k.startsWith("visor.seq")).forEach((k) => localStorage.removeItem(k)); }
+    catch (e) {}
+    ls.set("visor.cfg", JSON.stringify({ k: h.get("k"), c: h.get("c"), r: h.get("r") }));
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  try { return JSON.parse(ls.get("visor.cfg")); } catch (e) { return null; }
+}
+
+const fmt = (x, d = 2) => x === null || x === undefined || Number.isNaN(x) ? "—"
+  : x.toLocaleString("es-MX", { minimumFractionDigits: d, maximumFractionDigits: d });
+const conSigno = (x, d = 2) => x === null ? "—" : (x > 0 ? "+" : x < 0 ? "−" : "") + fmt(Math.abs(x), d);
+const clase = (x) => x > 0 ? "gana" : x < 0 ? "pierde" : "";
+const decimales = (p) => p >= 100 ? 2 : p >= 1 ? 4 : 6;
+const corto = (s) => s.endsWith("USDT") ? s.slice(0, -4) : s;
+const hora = (ms) => new Date(ms).toLocaleString("es-MX", { day: "2-digit", month: "2-digit", hour: "2-digit",
+  minute: "2-digit" });
+const MIN = 60000;
+
+async function consultar() {
+  ultimaConsulta = Date.now();
+  try {
+    const r = await fetch(`https://ntfy.sh/${encodeURIComponent(cfg.c)}/json?poll=1&since=12h`, { cache: "no-store" });
+    if (!r.ok) throw new Error(`ntfy respondió ${r.status}`);
+    const { foto: f, invalidas: inv } = await N.mejorFoto(clave, cfg.r, await r.text());
+    invalidas = inv; errorRed = null;
+    const claveSeq = `visor.seq.${cfg.c}.${cfg.r}`;
+    const maxSeq = Number(ls.get(claveSeq) || 0);
+    if (f && f.seq >= maxSeq) {
+      foto = f; rechazoViejo = false; ls.set(claveSeq, String(f.seq));
+    } else if (f) {
+      rechazoViejo = true;                      // una foto anterior a la ya aceptada no se muestra
+    }
+    conectarPrecios();
+  } catch (e) { errorRed = e.message || String(e); }
+  pintar();
+}
+
+function conectarPrecios() {
+  if (!foto) return;
+  const simbolos = foto.posiciones.map((p) => p.s.toLowerCase()).sort().join("/");
+  if (ws && simbolos === wsSimbolos && ws.readyState <= 1) return;
+  if (ws) { try { ws.onclose = null; ws.close(); } catch (e) {} }
+  wsSimbolos = simbolos; ws = null;
+  if (!simbolos) return;
+  const flujos = foto.posiciones.map((p) => `${p.s.toLowerCase()}@markPrice@1s`).join("/");
+  wsDesde = Date.now();
+  ws = new WebSocket(`wss://fstream.binance.com/stream?streams=${flujos}`);
+  ws.onmessage = (ev) => {
+    try {
+      const d = JSON.parse(ev.data).data;
+      precios[d.s] = Number(d.p); horaPrecio[d.s] = Date.now();
+    } catch (e) {}
+  };
+  ws.onclose = () => { ws = null; setTimeout(conectarPrecios, 3000); };
+}
+
+function renglon(etiqueta, valor, extra = "") {
+  return `<div class="fila ${extra}"><span>${etiqueta}</span><span class="${clase(valor)}">${conSigno(valor)}</span></div>`;
+}
+
+function pintar() {
+  const insignia = document.getElementById("insignia");
+  const avisos = [];
+  if (!foto) {
+    insignia.textContent = errorRed ? "Sin conexión" : "Buscando cartera…";
+    insignia.className = "insignia mal";
+    document.getElementById("avisos").innerHTML = errorRed ? `<div class="alerta">${errorRed}</div>` : "";
+    return;
+  }
+  document.getElementById("contenido").classList.remove("oculto");
+  const ahora = Date.now();
+  const vigentes = foto.posiciones.map((p) => p.s).filter((s) => horaPrecio[s] && ahora - horaPrecio[s] <= PRECIO_VIEJO_MS);
+  const enVivo = {};
+  for (const s of vigentes) enVivo[s] = precios[s];
+  const v = N.valorar(foto, enVivo);
+  const sinLatido = ahora - foto.emitido_ms > SIN_LATIDO_MS;
+  const motorAtrasado = foto.emitido_ms - (foto.corte_m + 1) * MIN > MOTOR_ATRASADO_MS;
+  const conectando = !v.todasEnVivo && ahora - wsDesde < PRECIO_VIEJO_MS;   // recién abierta: aún sin precio
+  const precioViejo = !v.todasEnVivo && foto.posiciones.length > 0 && !conectando;
+  if (sinLatido) avisos.push(`Sin señal del servidor desde ${hora(foto.emitido_ms)}. Lo que ves es la última cartera `
+    + "conocida, no necesariamente la vigente.");
+  if (motorAtrasado) avisos.push(`El servidor dejó de procesar minutos en ${hora(foto.corte_m * MIN)}: la cartera puede `
+    + "no estar al día.");
+  if (precioViejo) avisos.push("Precio desactualizado: sin precio en vivo de Binance en los últimos 10 s.");
+  if (rechazoViejo) avisos.push("Se rechazó una cartera anterior a la ya mostrada.");
+  if (errorRed) avisos.push(`No se pudo consultar la cartera: ${errorRed}`);
+  if (foto.capital_oficial === null) avisos.push("El servidor tiene datos pendientes: el oficial no es verificable.");
+  const vivo = !sinLatido && !motorAtrasado && !precioViejo && !errorRed;
+  insignia.textContent = sinLatido ? "Sin señal" : conectando && !motorAtrasado && !errorRed ? "Conectando precios…"
+    : vivo ? "En vivo" : "Desactualizado";
+  insignia.className = "insignia " + (conectando ? "" : vivo ? "ok" : "mal");
+  document.getElementById("avisos").innerHTML = avisos.map((a) => `<div class="alerta">${a}</div>`).join("");
+
+  const ini = Number(foto.capital_inicial);
+  document.querySelector("#contenido .caja .chico").textContent =
+    sinLatido ? `Capital estimado con la cartera de ${hora(foto.emitido_ms)}` : "Capital estimado ahora";
+  document.getElementById("capital").textContent = fmt(v.capital);
+  const tot = v.desdeArranque ? v.desdeArranque.total : null;
+  const variacion = document.getElementById("variacion");
+  variacion.className = "chico " + clase(tot);
+  variacion.textContent = tot === null ? "" : `${conSigno(tot)} (${conSigno(tot / ini * 100)}%) desde el arranque`;
+
+  let html = "";
+  if (vista === "arranque" && v.desdeArranque) {
+    const a = v.desdeArranque;
+    html = renglon("Realizada (ventas)", a.realizado) + renglon("Comisiones", a.comisiones, "chico")
+      + renglon("Funding", a.funding, "chico") + renglon("No realizada (abiertas)", a.noRealizada)
+      + renglon("Total", a.total, "total");
+  } else if (vista === "hoy" && v.hoy) {
+    const h = v.hoy;
+    html = `<div class="chico">Desde la decisión del ${hora(foto.decision.m * MIN)} · base ${fmt(h.base)} USDT</div>`
+      + renglon("Realizada hoy", h.realizado) + renglon("Comisiones", h.comisiones, "chico")
+      + renglon("Funding", h.funding, "chico") + renglon("Variación de las abiertas", h.abiertas)
+      + `<div class="fila total"><span>Total del día</span><span class="${clase(h.total)}">${conSigno(h.total)} `
+      + `(${conSigno(h.pct * 100)}%)</span></div>`;
+  } else {
+    html = `<div class="chico">Sin datos suficientes para esta vista.</div>`;
+  }
+  const b = foto.bloqueos, bloqueos = [b.dia && "día", b.ventana && "7 días", b.datos && "datos"].filter(Boolean);
+  const margen = foto.posiciones.reduce((s, p) => s + Number(p.margen), 0);
+  html += `<div class="rejilla chico">
+    <div>Efectivo<b>${fmt(Number(foto.efectivo))}</b></div>
+    <div>Margen en posiciones<b>${fmt(margen)}</b></div>
+    <div>Caída máxima<b>${fmt(Number(foto.caida_obs) * 100)}% de 10%</b></div>
+    <div>Estado<b class="${foto.estado === "ACTIVA" && !bloqueos.length ? "gana" : "pierde"}">${foto.estado}${
+      bloqueos.length ? " · bloqueo " + bloqueos.join(", ") : ""}</b></div></div>`;
+  document.getElementById("desglose").innerHTML = html;
+
+  document.getElementById("titulo-pos").textContent =
+    `Posiciones abiertas (${foto.posiciones.length}) · 1x · resultado no realizado`;
+  document.getElementById("posiciones").innerHTML = v.posiciones.map((p) => {
+    if (p.precio === null) return `<div class="caja pos"><span class="nombre">${corto(p.s)}</span> sin precio</div>`;
+    const d = decimales(p.precio);
+    return `<div class="caja pos">
+      <div class="fila"><span class="nombre">${corto(p.s)}</span>
+        <span class="${clase(p.resultado)}" style="font-weight:600">${conSigno(p.resultado)} USDT (${conSigno(p.pct * 100, 1)}%)</span></div>
+      <div class="fila chico"><span>Entrada ${fmt(Number(p.entrada), d)} · Ahora ${fmt(p.precio, d)}${p.enVivo ? "" : " (ref.)"}</span>
+        <span>Margen ${fmt(Number(p.margen))}</span></div>
+      <div class="chico" style="margin-top:4px">Stop ${p.stop === null ? "—" : fmt(Number(p.stop), d)}${
+        p.aStop === null ? "" : " · falta " + conSigno(p.aStop * 100, 1) + "%"}</div>
+      <div class="barra"><i style="width:${Math.round(p.recorrido * 100)}%"></i></div></div>`;
+  }).join("");
+
+  const proxima = new Date(); proxima.setUTCHours(4, 0, 0, 0);
+  if (proxima.getTime() <= ahora) proxima.setUTCDate(proxima.getUTCDate() + 1);
+  document.getElementById("pie").innerHTML =
+    `Precios de Binance en vivo; los valores son estimados.<br>`
+    + `Oficial del servidor: ${foto.capital_oficial === null ? "no verificable" : fmt(Number(foto.capital_oficial)) + " USDT"}`
+    + ` al corte de ${hora(foto.corte_m * MIN)}<br>`
+    + `Última señal del servidor: ${hora(foto.emitido_ms)} (${foto.motivo}, n.º ${foto.seq})<br>`
+    + `Próxima decisión: ${hora(proxima.getTime())}`
+    + (invalidas ? `<br>${invalidas} mensaje(s) inválido(s) ignorado(s)` : "");
+}
+
+function elegir(v) {
+  vista = v; ls.set("visor.vista", v);
+  document.getElementById("b-arranque").classList.toggle("activo", v === "arranque");
+  document.getElementById("b-hoy").classList.toggle("activo", v === "hoy");
+  pintar();
+}
+
+async function iniciar() {
+  cfg = leerConfig();
+  if (!cfg) {
+    document.getElementById("config").classList.remove("oculto");
+    document.getElementById("insignia").textContent = "Sin configurar";
+    return;
+  }
+  try { clave = await N.importarClave(cfg.k); } catch (e) {
+    document.getElementById("avisos").innerHTML = `<div class="alerta">Clave inválida: vuelve a abrir el enlace de configuración.</div>`;
+    return;
+  }
+  document.getElementById("b-arranque").onclick = () => elegir("arranque");
+  document.getElementById("b-hoy").onclick = () => elegir("hoy");
+  elegir(ls.get("visor.vista") === "hoy" ? "hoy" : "arranque");
+  await consultar();
+  setInterval(() => { if (document.visibilityState === "visible") pintar(); }, 1000);
+  setInterval(() => { if (document.visibilityState === "visible") consultar(); }, POLL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") { precios = {}; horaPrecio = {}; consultar(); conectarPrecios(); }
+  });
+}
+iniciar();
+</script>
+</body>
+</html>
