@@ -178,7 +178,7 @@ function conectarPrecios() {
   if (!simbolos) return;
   const flujos = foto.posiciones.map((p) => `${p.s.toLowerCase()}@markPrice@1s`).join("/");
   wsDesde = Date.now();
-  ws = new WebSocket(`wss://fstream.binance.com/stream?streams=${flujos}`);
+  ws = new WebSocket(`wss://fstream.binance.com/market/stream?streams=${flujos}`);
   ws.onmessage = (ev) => {
     try {
       const d = JSON.parse(ev.data).data;
