@@ -67,8 +67,14 @@ h1 { font-size: 18px; font-weight: 600; margin: 0; }
 
   <div id="config" class="caja oculto">
     <div style="font-weight:600;margin-bottom:6px">Falta configurar</div>
-    <div class="chico">Abre en este iPhone el enlace de configuración que genera el servidor. Solo se hace una
-      vez: la clave queda guardada en el teléfono y no viaja a ningún servidor.</div>
+    <div class="chico">Copia completo el enlace de configuración que te mandaste (mantén presionado el enlace y
+      elige «Copiar») y pégalo aquí. Solo se hace una vez: la clave queda guardada en este teléfono.</div>
+    <textarea id="pegado" rows="4" style="width:100%;margin-top:10px;font:inherit;font-size:14px;padding:8px;
+      border-radius:8px;border:1px solid var(--linea);background:var(--suave);color:var(--texto)"
+      placeholder="https://rqsconta.github.io/cartera/#k=…"></textarea>
+    <button id="configurar" style="margin-top:8px;width:100%;padding:10px;font:inherit;font-weight:600;border:0;
+      border-radius:8px;background:var(--acento);color:#fff">Configurar</button>
+    <div id="error-config" class="chico" style="color:var(--pierde);margin-top:6px"></div>
   </div>
 
   <div id="avisos"></div>
@@ -104,6 +110,18 @@ const ls = {
 };
 let cfg = null, clave = null, foto = null, precios = {}, horaPrecio = {}, ws = null, wsSimbolos = "", vista = "arranque";
 let ultimaConsulta = 0, invalidas = 0, rechazoViejo = false, errorRed = null, wsDesde = 0;
+
+function guardarDesde(texto) {
+  // Teams y Outlook envuelven el enlace (Safe Links) y codifican el «#»: se decodifica antes de buscarlo.
+  if (texto.indexOf("#") < 0 && /%23/i.test(texto)) { try { texto = decodeURIComponent(texto); } catch (e) {} }
+  const i = texto.indexOf("#");
+  const h = new URLSearchParams(i >= 0 ? texto.slice(i + 1).trim() : "");
+  if (!(h.get("k") && h.get("c") && h.get("r"))) return false;
+  try { Object.keys(localStorage).filter((k) => k.startsWith("visor.seq")).forEach((k) => localStorage.removeItem(k)); }
+  catch (e) {}
+  ls.set("visor.cfg", JSON.stringify({ k: h.get("k"), c: h.get("c"), r: h.get("r") }));
+  return true;
+}
 
 function leerConfig() {
   const h = new URLSearchParams(location.hash.slice(1));
@@ -275,6 +293,11 @@ async function iniciar() {
   if (!cfg) {
     document.getElementById("config").classList.remove("oculto");
     document.getElementById("insignia").textContent = "Sin configurar";
+    document.getElementById("configurar").onclick = () => {
+      if (guardarDesde(document.getElementById("pegado").value)) location.reload();
+      else document.getElementById("error-config").textContent =
+        "Ese texto no trae la configuración completa. Copia el enlace entero, desde «https» hasta el final.";
+    };
     return;
   }
   try { clave = await N.importarClave(cfg.k); } catch (e) {
