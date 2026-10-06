@@ -112,6 +112,7 @@ let cfg = null, clave = null, foto = null, precios = {}, horaPrecio = {}, ws = n
 let ultimaConsulta = 0, invalidas = 0, rechazoViejo = false, errorRed = null, wsDesde = 0;
 
 function guardarDesde(texto) {
+  texto = texto.replace(/["'“”‘’«»\s]/g, "");   // comillas y espacios del copiado
   // Teams y Outlook envuelven el enlace (Safe Links) y codifican el «#»: se decodifica antes de buscarlo.
   if (texto.indexOf("#") < 0 && /%23/i.test(texto)) { try { texto = decodeURIComponent(texto); } catch (e) {} }
   const i = texto.indexOf("#");
