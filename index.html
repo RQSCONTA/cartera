@@ -67,11 +67,11 @@ h1 { font-size: 18px; font-weight: 600; margin: 0; }
 
   <div id="config" class="caja oculto">
     <div style="font-weight:600;margin-bottom:6px">Falta configurar</div>
-    <div class="chico">Copia completo el enlace de configuración que te mandaste (mantén presionado el enlace y
-      elige «Copiar») y pégalo aquí. Solo se hace una vez: la clave queda guardada en este teléfono.</div>
+    <div class="chico">Pega aquí el código de configuración que te mandaste (empieza con «k=»). Solo se hace una
+      vez: la clave queda guardada en este teléfono.</div>
     <textarea id="pegado" rows="4" style="width:100%;margin-top:10px;font:inherit;font-size:14px;padding:8px;
       border-radius:8px;border:1px solid var(--linea);background:var(--suave);color:var(--texto)"
-      placeholder="https://rqsconta.github.io/cartera/#k=…"></textarea>
+      placeholder="k=…&amp;c=…&amp;r=…"></textarea>
     <button id="configurar" style="margin-top:8px;width:100%;padding:10px;font:inherit;font-weight:600;border:0;
       border-radius:8px;background:var(--acento);color:#fff">Configurar</button>
     <div id="error-config" class="chico" style="color:var(--pierde);margin-top:6px"></div>
@@ -115,7 +115,8 @@ function guardarDesde(texto) {
   // Teams y Outlook envuelven el enlace (Safe Links) y codifican el «#»: se decodifica antes de buscarlo.
   if (texto.indexOf("#") < 0 && /%23/i.test(texto)) { try { texto = decodeURIComponent(texto); } catch (e) {} }
   const i = texto.indexOf("#");
-  const h = new URLSearchParams(i >= 0 ? texto.slice(i + 1).trim() : "");
+  // Acepta el enlace completo o solo el código «k=…&c=…&r=…» (Teams corta los enlaces en el «#»).
+  const h = new URLSearchParams(i >= 0 ? texto.slice(i + 1).trim() : texto.trim().replace(/^[^k]*(?=k=)/, ""));
   if (!(h.get("k") && h.get("c") && h.get("r"))) return false;
   try { Object.keys(localStorage).filter((k) => k.startsWith("visor.seq")).forEach((k) => localStorage.removeItem(k)); }
   catch (e) {}
